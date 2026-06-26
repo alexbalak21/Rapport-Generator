@@ -1,0 +1,7 @@
+{
+  "date": "{{date}}",
+  "species": "{{species}}",
+  "address": "{{address}}",
+  "inspector": "{{inspector}}",
+  "notes": "{{notes}}"
+}
