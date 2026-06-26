@@ -1,24 +1,34 @@
 {
-  "date": "{{date}}",
-  "species": "{{species}}",
-  "address": "{{address}}",
+  "config": {
+    "data_file":     "S:/Documents/.../table.xlsx",
+    "template_file": "S:/Documents/.../template.docx",
+    "output_dir":    "S:/Documents/.../output"
+  },
+
+  "date":      "{{date}}",
+  "species":   "{{species}}",
+  "address":   "{{address}}",
   "inspector": "{{inspector}}",
-  "notes": "{{notes}}",
-  "product" : "{{product}}",
+  "notes":     "{{notes}}",
+  "product":   "{{product}}",
+
   "today_date": {
-  "operation": "today",
-  "format": "%d/%m/%Y"
-},
-"species_upper": {
-  "operation": "uppercase",
-  "input": "species"
-},
-"full_line": {
-  "operation": "format",
-  "format": "{species} inspected on {date}"
-},
+    "operation": "today",
+    "format": "%d/%m/%Y"
+  },
+  "species_upper": {
+    "operation": "uppercase",
+    "input": "species"
+  },
+  "full_line": {
+    "operation": "format",
+    "format": "{species} inspected on {date}"
+  },
   "report_number": {
     "operation": "report_number"
+  },
+  "file_name": {
+    "operation": "format",
+    "format": "{species}_{date}_{report_number}.pdf"
   }
 }
-

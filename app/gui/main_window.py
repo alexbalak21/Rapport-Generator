@@ -4,6 +4,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 
 from app.core.report_generator import ReportGenerator
+from app.core.mapping_loader import MappingLoader
 from app.gui.file_dialogs import select_excel_file, select_docx_template, select_mapping_file
 from app.repository.config_repository import config_get, config_set
 from app.repository.rapport_repository import save_report
@@ -126,7 +127,12 @@ class MainWindow(tk.Tk):
             self.template_path.set(docx)
 
         mapping = config_get(KEY_MAPPING)
-        self.mapping_path.set(mapping if mapping else DEFAULT_MAPPING)
+        if mapping:
+            self.mapping_path.set(mapping)
+            self._apply_mapping_config(mapping)
+        else:
+            self.mapping_path.set(DEFAULT_MAPPING)
+            self._apply_mapping_config(DEFAULT_MAPPING)
 
         last_line = config_get(KEY_LINE)
         if last_line and last_line.isdigit():
@@ -176,6 +182,22 @@ class MainWindow(tk.Tk):
         if path:
             self.mapping_path.set(path)
             config_set(KEY_MAPPING, path)
+            self._apply_mapping_config(path)
+
+    def _apply_mapping_config(self, mapping_path: str):
+        """Read the 'config' block from the mapping and auto-fill Excel/template paths."""
+        try:
+            cfg = MappingLoader(mapping_path).load_config()
+        except Exception:
+            return
+
+        data_file = cfg.get("data_file", "")
+        if data_file:
+            self.excel_path.set(data_file)
+
+        template_file = cfg.get("template_file", "")
+        if template_file:
+            self.template_path.set(template_file)
 
     def on_generate_report(self):
         excel   = self.excel_path.get()
