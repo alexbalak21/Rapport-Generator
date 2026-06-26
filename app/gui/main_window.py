@@ -76,7 +76,7 @@ class MainWindow(tk.Tk):
         line_frame = ttk.Frame(self)
         line_frame.pack(**pad)
 
-        ttk.Label(line_frame, text="Line (row):", width=18, anchor="w").pack(side="left")
+        ttk.Label(line_frame, text="Line (row ≥ 2):", width=18, anchor="w").pack(side="left")
 
         ttk.Button(line_frame, text="−", width=3,
                    command=self._decrement_line).pack(side="left", padx=(0, 4))
@@ -132,7 +132,7 @@ class MainWindow(tk.Tk):
         if last_line and last_line.isdigit():
             self.line_number.set(int(last_line) + 1)
         else:
-            self.line_number.set(1)
+            self.line_number.set(2)  # row 1 is the header
 
     def _save_config(self, line: int):
         """Persist current UI state to SQLite."""
@@ -154,7 +154,7 @@ class MainWindow(tk.Tk):
 
     def _decrement_line(self):
         current = self.line_number.get()
-        if current > 1:
+        if current > 2:
             self.line_number.set(current - 1)
 
     # ------------------------------------------------------------------
@@ -189,12 +189,12 @@ class MainWindow(tk.Tk):
         if not mapping:
             messagebox.showerror("Missing mapping", "Select a mapping file first.")
             return
-        if line < 1:
-            messagebox.showerror("Invalid line", "Line number must be ≥ 1.")
+        if line < 2:
+            messagebox.showerror("Invalid line", "Row number must be ≥ 2 (row 1 is the header).")
             return
 
-        # Excel rows start at 2 (row 1 = header); the widget shows logical lines
-        row_number = line + 1
+        # The widget shows the actual Excel row number (row 1 = header, data starts at 2)
+        row_number = line
 
         output_path = os.path.join(os.getcwd(), f"report_row_{row_number}.docx")
 
