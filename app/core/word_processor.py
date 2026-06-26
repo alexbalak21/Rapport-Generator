@@ -3,6 +3,7 @@ from docx import Document
 
 PLACEHOLDER_PATTERN = r"\{\{(.*?)\}\}"
 
+
 class WordProcessor:
     def __init__(self, filepath):
         self.filepath = filepath
@@ -16,11 +17,10 @@ class WordProcessor:
     def fill_placeholders(self, mapping, output_path):
         """
         Replace placeholders using mapping:
-        { "date": "2024-06-12", ... }
+        { "{{date}}": "2024-06-12", ... }
         """
         for paragraph in self.document.paragraphs:
-            for key, value in mapping.items():
-                placeholder = f"{{{{{key}}}}}"
+            for placeholder, value in mapping.items():
                 if placeholder in paragraph.text:
                     paragraph.text = paragraph.text.replace(placeholder, str(value))
 

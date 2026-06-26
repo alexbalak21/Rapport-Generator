@@ -31,6 +31,7 @@ class ReportGenerator:
         filled = {
             placeholder: row_data[column]
             for column, placeholder in mapping.items()
+            if column in row_data
         }
 
         # Process Word template
