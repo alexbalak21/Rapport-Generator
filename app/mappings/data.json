@@ -1,17 +1,15 @@
 {
   "config": {
-    "data_file":     "S:/Documents/.../table.xlsx",
-    "template_file": "S:/Documents/.../template.docx",
-    "output_dir":    "S:/Documents/.../output"
+    "data_file": "S:/Documents/Rapport_Generation/table.xlsx",
+    "template_file": "S:/Documents/Rapport_Generation/template.docx",
+    "output_dir": "S:/Documents/Rapport_Generation/Output"
   },
-
-  "date":      "{{date}}",
-  "species":   "{{species}}",
-  "address":   "{{address}}",
+  "date": "{{date}}",
+  "species": "{{species}}",
+  "address": "{{address}}",
   "inspector": "{{inspector}}",
-  "notes":     "{{notes}}",
-  "product":   "{{product}}",
-
+  "notes": "{{notes}}",
+  "product": "{{product}}",
   "today_date": {
     "operation": "today",
     "format": "%d/%m/%Y"
@@ -29,6 +27,6 @@
   },
   "file_name": {
     "operation": "format",
-    "format": "{species}_{date}_{report_number}.pdf"
+    "format": "{species}_{date}_{report_number}.docx"
   }
 }

@@ -6,6 +6,7 @@ import os
 import tkinter as tk
 from tkinter import ttk, messagebox
 
+from app.core.mapping_loader import MappingLoader
 from app.gui.file_dialogs import select_excel_file, select_docx_template, select_mapping_file
 from app.gui.line_selector import LineSelector
 from app.gui.config_persistence import (
@@ -41,9 +42,9 @@ class MainWindow(tk.Tk):
     def _build_ui(self):
         ttk.Label(self, text="Report Generator", font=("Arial", 16, "bold")).pack(pady=(14, 8))
 
+        self._path_row("Mapping (.json)",    "Select…", self.on_select_mapping,  self.mapping_path)
         self._path_row("Data file (.xlsx)",  "Select…", self.on_select_excel,    self.excel_path)
         self._path_row("Template (.docx)",   "Select…", self.on_select_template, self.template_path)
-        self._path_row("Mapping (.json)",    "Select…", self.on_select_mapping,  self.mapping_path)
 
         ttk.Separator(self, orient="horizontal").pack(fill="x", padx=14, pady=10)
 
@@ -71,13 +72,18 @@ class MainWindow(tk.Tk):
 
     def _restore(self):
         state = restore_config()
-        self.excel_path.set(state["excel"])
-        self.template_path.set(state["docx"])
         self.line_number.set(state["line"])
 
+        # Mapping first — its config block auto-fills excel and template
         mapping = state["mapping"] or DEFAULT_MAPPING
         self.mapping_path.set(mapping)
         self._apply_mapping_config(mapping)
+
+        # Manual overrides (if the user had picked different files after the mapping)
+        if state["excel"]:
+            self.excel_path.set(state["excel"])
+        if state["docx"]:
+            self.template_path.set(state["docx"])
 
     # ------------------------------------------------------------------
     # Button callbacks
@@ -87,11 +93,13 @@ class MainWindow(tk.Tk):
         path = select_excel_file()
         if path:
             self.excel_path.set(path)
+            self._update_mapping_config(data_file=path)
 
     def on_select_template(self):
         path = select_docx_template()
         if path:
             self.template_path.set(path)
+            self._update_mapping_config(template_file=path)
 
     def on_select_mapping(self):
         path = select_mapping_file()
@@ -107,6 +115,16 @@ class MainWindow(tk.Tk):
             self.excel_path.set(cfg["data_file"])
         if cfg.get("template_file"):
             self.template_path.set(cfg["template_file"])
+
+    def _update_mapping_config(self, **kwargs):
+        """Write changed paths back into the active mapping JSON."""
+        mapping = self.mapping_path.get()
+        if not mapping:
+            return
+        try:
+            MappingLoader(mapping).update_config(**kwargs)
+        except Exception:
+            pass
 
     def on_generate_report(self):
         excel   = self.excel_path.get()

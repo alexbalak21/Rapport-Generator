@@ -40,3 +40,5 @@ desktop.ini
 .pytest_cache/
 .coverage
 htmlcov/
+
+app_data.db
