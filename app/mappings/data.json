@@ -4,12 +4,14 @@
     "template_file": "C:/repport gen/template.docx",
     "output_dir": "C:\\repport gen\\out"
   },
-  "date": "{{date}}",
-  "species": "{{species}}",
-  "address": "{{address}}",
+
+  "date":      "{{date}}",
+  "species":   "{{species}}",
+  "address":   "{{address}}",
   "inspector": "{{inspector}}",
-  "notes": "{{notes}}",
-  "product": "{{product}}",
+  "notes":     "{{notes}}",
+  "product":   "{{product}}",
+
   "today_date": {
     "operation": "today",
     "format": "%d/%m/%Y"
@@ -28,5 +30,29 @@
   "file_name": {
     "operation": "format",
     "format": "{species}_{date}_{report_number}.docx"
+  },
+
+  "client_name": {
+    "operation": "lookup",
+    "sheet": "Clients",
+    "key": "id",
+    "match": "client",
+    "value": "Name"
+  },
+
+  "city": {
+    "operation": "lookup_join",
+    "steps": [
+      { "sheet": "Clients",  "key": "id", "match": "client",     "value": "address_id" },
+      { "sheet": "Adresses", "key": "id", "match": "<previous>", "value": "city" }
+    ]
+  },
+
+  "zip": {
+    "operation": "lookup_join",
+    "steps": [
+      { "sheet": "Clients",  "key": "id", "match": "client",     "value": "address_id" },
+      { "sheet": "Adresses", "key": "id", "match": "<previous>", "value": "zip" }
+    ]
   }
 }
