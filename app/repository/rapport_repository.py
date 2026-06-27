@@ -1,159 +1,85 @@
+import sqlite3
+import json
 import os
-import re
-from .excel_reader import ExcelReader
-from .word_processor import WordProcessor
-from .mapping_loader import MappingLoader
-from .state_manager import ReportStateManager
-from . import processors
+import datetime
 
-# Characters illegal in Windows filenames
-_ILLEGAL_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+DB_PATH = os.path.join(os.path.dirname(__file__), "..", "app_data.db")
 
 
-class ReportGenerator:
-    def __init__(self, excel_path, template_path, mapping_path):
-        self.excel_path    = excel_path
-        self.template_path = template_path
-        self.mapping_path  = mapping_path
+def _get_connection():
+    conn = sqlite3.connect(os.path.abspath(DB_PATH))
 
-        self.mapping_loader = MappingLoader(mapping_path)
-        self.state_manager  = ReportStateManager(
-            os.path.join(os.path.dirname(mapping_path), "report_state.json")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS reports (
+            id            TEXT PRIMARY KEY,
+            created_at    TEXT NOT NULL,
+            excel_path    TEXT NOT NULL,
+            template_path TEXT NOT NULL,
+            mapping_path  TEXT NOT NULL,
+            row_number    INTEGER NOT NULL,
+            data_json     TEXT NOT NULL
         )
+    """)
 
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS report_state (
+            key   TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )
+    """)
 
-    @staticmethod
-    def _normalize_header(value) -> str:
-        if value is None:
-            return ""
-        return str(value).strip()
+    conn.commit()
+    return conn
 
-    @staticmethod
-    def _sanitize_filename(name: str) -> str:
-        sanitized = _ILLEGAL_FILENAME_CHARS.sub("_", name)
-        sanitized = sanitized.strip(". ")
-        return sanitized or "report"
 
-    @staticmethod
-    def _normalize_field_value(value) -> str:
-        import datetime as dt
-        if isinstance(value, (dt.datetime, dt.date)):
-            return value.strftime("%Y-%m-%d")
-        if value is None:
-            return ""
-        return str(value).strip()
+# ── Report log ────────────────────────────────────────────────────────────────
 
-    def _build_operations(self, excel_reader: ExcelReader) -> dict:
-        """
-        Return the operations map.
-        Lookup operations receive the excel_reader via closure so they can
-        access any sheet without changing the (rule, row_data) signature used
-        by all other operations.
-        """
-        return {
-            "today":         processors.op_today,
-            "uppercase":     processors.op_uppercase,
-            "lowercase":     processors.op_lowercase,
-            "format":        processors.op_format,
-            "concat":        processors.op_concat,
-            "report_number": lambda rule, row: self.state_manager.generate_report_number(),
-            "lookup":        lambda rule, row: processors.op_lookup(rule, row, excel_reader),
-            "lookup_join":   lambda rule, row: processors.op_lookup_join(rule, row, excel_reader),
-        }
+def save_report(report_id: str, created_at: str, excel_path: str,
+                template_path: str, mapping_path: str,
+                row_number: int, data: dict) -> None:
+    with _get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO reports
+                (id, created_at, excel_path, template_path, mapping_path, row_number, data_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (report_id, created_at, excel_path, template_path, mapping_path,
+             row_number, json.dumps(data, ensure_ascii=False)),
+        )
+        conn.commit()
 
-    def compute_value(self, rule: dict, row_data: dict, operations: dict):
-        operation = rule.get("operation")
-        func = operations.get(operation)
-        return func(rule, row_data) if func else None
 
-    # ------------------------------------------------------------------
-    # Main entry point
-    # ------------------------------------------------------------------
+def list_reports() -> list[dict]:
+    with _get_connection() as conn:
+        rows = conn.execute(
+            "SELECT id, created_at, excel_path, template_path, mapping_path, row_number "
+            "FROM reports ORDER BY created_at DESC"
+        ).fetchall()
+        return [
+            {
+                "id": r[0], "created_at": r[1], "excel_path": r[2],
+                "template_path": r[3], "mapping_path": r[4], "row_number": r[5],
+            }
+            for r in rows
+        ]
 
-    def generate(self, row_number: int, output_path: str) -> str:
-        # ── Load Excel (all sheets) ───────────────────────────────────
-        excel = ExcelReader(self.excel_path)
-        excel.load()
-        raw_row  = excel.get_row_as_dict(row_number)
-        row_data = {k: self._normalize_field_value(v) for k, v in raw_row.items()}
 
-        operations    = self._build_operations(excel)
-        mapping       = self.mapping_loader.load()
-        excel_columns = {self._normalize_header(c) for c in excel.get_columns()}
+# ── Report state (replaces report_state.json) ─────────────────────────────────
 
-        word                  = WordProcessor(self.template_path)
-        available_placeholders = set(word.extract_placeholders())
+def get_last_report_number() -> str | None:
+    with _get_connection() as conn:
+        row = conn.execute(
+            "SELECT value FROM report_state WHERE key = 'last_report_number'"
+        ).fetchone()
+        return row[0] if row else None
 
-        filled:          dict[str, str] = {}
-        computed_values: dict[str, str] = {}
 
-        # ── Pass 1: simple column mappings ────────────────────────────
-        for key, rule in mapping.items():
-            if not isinstance(rule, str):
-                continue
-            normalized_key = self._normalize_header(key)
-            if normalized_key not in excel_columns:
-                continue
-            if normalized_key not in row_data:
-                continue
-            match = re.search(r"\{\{(.*?)\}\}", rule)
-            if not match:
-                continue
-            placeholder_name = match.group(1).strip()
-            if placeholder_name not in available_placeholders:
-                continue
-            value = row_data[normalized_key]
-            filled[rule] = value
-            computed_values[key] = value
-
-        # ── Pass 2: computed fields (excluding file_name) ─────────────
-        # Iterates until no new values are resolved, supporting dependency chains.
-        max_passes = len(mapping) + 1
-        for _ in range(max_passes):
-            resolved_any = False
-            for key, rule in mapping.items():
-                if not isinstance(rule, dict):
-                    continue
-                if key == "file_name":
-                    continue
-                if key in computed_values:
-                    continue  # already resolved
-
-                enriched = {**row_data, **computed_values}
-                try:
-                    value = self.compute_value(rule, enriched, operations)
-                except Exception:
-                    value = None
-
-                if value is None:
-                    continue
-
-                computed_values[key] = str(value)
-                resolved_any = True
-
-                placeholder_full = f"{{{{{key}}}}}"
-                if key in available_placeholders:
-                    filled[placeholder_full] = str(value)
-
-            if not resolved_any:
-                break
-
-        # ── Pass 3: file_name (resolved last so it can use report_number) ──
-        file_name_rule    = mapping.get("file_name")
-        resolved_filename = None
-        if isinstance(file_name_rule, dict):
-            enriched = {**row_data, **computed_values}
-            try:
-                raw_name = self.compute_value(file_name_rule, enriched, operations)
-                if raw_name:
-                    resolved_filename = self._sanitize_filename(raw_name)
-            except Exception:
-                pass
-
-        # ── Write output ──────────────────────────────────────────────
-        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-        word.fill_placeholders(filled, output_path)
-        return output_path
+def set_last_report_number(value: str) -> None:
+    with _get_connection() as conn:
+        conn.execute(
+            "INSERT INTO report_state (key, value) VALUES ('last_report_number', ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (value,),
+        )
+        conn.commit()
