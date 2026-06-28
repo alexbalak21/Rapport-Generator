@@ -25,32 +25,42 @@ def resolve_output_path(mapping_path: str, excel_path: str,
     except Exception:
         return os.getcwd(), f"report_row_{row_number}.docx"
 
-    # SQLite override takes priority (user's last manual choice)
     initial_dir = config_get("last_output_dir") or cfg.get("output_dir") or os.getcwd()
+    date_format = cfg.get("date_format", "%d/%m/%Y")
 
-    # Try to resolve the file_name rule using actual row data
     file_name_rule = rules.get("file_name")
     if isinstance(file_name_rule, dict):
         try:
-            from app.core.report_generator import ReportGenerator as RG
-            gen = RG(excel_path, docx_path, mapping_path)
-            excel = ExcelReader(excel_path)
+            gen        = ReportGenerator(excel_path, docx_path, mapping_path)
+            excel      = ExcelReader(excel_path)
             excel.load()
-            raw_row = excel.get_row_as_dict(row_number)
-            row_data = {k: gen._normalize_field_value(v) for k, v in raw_row.items()}
+            raw_row    = excel.get_row_as_dict(row_number)
 
-            # Resolve computed values needed by file_name (report_number, today, etc.)
+            # Normalize with the correct date_format from config
+            row_data = {
+                k: gen._normalize_field_value(v, date_format)
+                for k, v in raw_row.items()
+            }
+
+            # Build the full operations map (needed for compute_value)
+            operations = gen._build_operations(excel)
+
+            # Resolve all computed fields except file_name
             computed = {}
             for key, rule in rules.items():
                 if not isinstance(rule, dict) or key == "file_name":
                     continue
                 enriched = {**row_data, **computed}
-                val = gen.compute_value(rule, enriched)
-                if val is not None:
-                    computed[key] = str(val)
+                try:
+                    val = gen.compute_value(rule, enriched, operations)
+                    if val is not None:
+                        computed[key] = str(val)
+                except Exception:
+                    pass
 
+            # Resolve file_name with all computed values available
             enriched = {**row_data, **computed}
-            raw_name = gen.compute_value(file_name_rule, enriched)
+            raw_name = gen.compute_value(file_name_rule, enriched, operations)
             if raw_name:
                 return initial_dir, gen._sanitize_filename(raw_name)
         except Exception:
@@ -71,9 +81,7 @@ def generate_report(excel: str, docx: str, mapping: str,
         mapping_path=mapping,
     )
     final_path = generator.generate(row_number=row_number, output_path=output_path)
-
     _log_report(excel, docx, mapping, row_number)
-
     return final_path
 
 
