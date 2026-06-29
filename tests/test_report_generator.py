@@ -1,3 +1,4 @@
+import datetime
 import unittest
 import tempfile
 import os
@@ -24,11 +25,20 @@ class TestReportGenerator(unittest.TestCase):
         self.mapping_path = os.path.join(self.temp_dir, "mapping.json")
         self.output_path = os.path.join(self.temp_dir, "output.docx")
 
-        # Create Excel workbook with one data row
+        # Create Excel workbook with one data row.
+        # K-value is stored as a formula cell so the reader must resolve its computed value.
         wb = Workbook()
         ws = wb.active
         ws.append(["date rapport", "temperature reception", "imp", "k value", "date emabalage", "dlc"])
-        ws.append(["2026-06-21", "4°C", 0.738026819923372, 0.261973180076628, "2026-05-31", "2026-06-14"])
+        ws.append([
+            datetime.date(2026, 6, 21),
+            "4°C",
+            0.738026819923372,
+            None,
+            datetime.date(2026, 5, 31),
+            datetime.date(2026, 6, 14),
+        ])
+        ws["D2"] = "=1-C2"
         wb.save(self.xlsx_path)
 
         # Create Word template with placeholders
