@@ -42,3 +42,4 @@ desktop.ini
 htmlcov/
 
 app/app_data.db
+out/

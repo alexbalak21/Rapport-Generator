@@ -21,6 +21,7 @@ from app.gui.config_persistence import (
     restore_config, save_config, save_mapping_path, load_mapping_config, save_output_dir,
 )
 from app.gui.report_actions import resolve_output_path, generate_report
+from app.gui.windows.generation_complete_dialog import GenerationCompleteDialog
 
 DEFAULT_MAPPING = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "mappings", "data.json")
@@ -58,9 +59,18 @@ class MainWindow(tk.Tk):
     def _build_ui(self):
         ttk.Label(self, text="Report Generator", font=("Arial", 16, "bold")).pack(pady=(14, 8))
 
-        self._path_row("Mapping (.json)",   "Select…", self.on_select_mapping,  self.mapping_path)
-        self._path_row("Data file (.xlsx)", "Select…", self.on_select_excel,    self.excel_path)
-        self._path_row("Template (.docx)",  "Select…", self.on_select_template, self.template_path)
+        self._path_row(
+            "Mapping (.json)", "Select…", self.on_select_mapping, self.mapping_path,
+            open_cmd=lambda: self._open_file(self.mapping_path.get()),
+        )
+        self._path_row(
+            "Data file (.xlsx)", "Select…", self.on_select_excel, self.excel_path,
+            open_cmd=lambda: self._open_file(self.excel_path.get()),
+        )
+        self._path_row(
+            "Template (.docx)", "Select…", self.on_select_template, self.template_path,
+            open_cmd=lambda: self._open_file(self.template_path.get()),
+        )
         self._output_row()
         self._report_name_row()
 
@@ -82,22 +92,24 @@ class MainWindow(tk.Tk):
 
         self._update_preview()
 
-    def _path_row(self, label: str, btn_text: str, cmd, var: tk.StringVar):
+    def _path_row(self, label: str, btn_text: str, cmd, var: tk.StringVar, open_cmd=None):
         frame = ttk.Frame(self)
         frame.pack(fill="x", padx=14, pady=3)
         ttk.Label(frame, text=label, width=18, anchor="w").pack(side="left")
         ttk.Button(frame, text=btn_text, command=cmd, width=10).pack(side="left", padx=(0, 8))
         ttk.Label(frame, textvariable=var, foreground="#1a5fb4",
-                  wraplength=320, anchor="w").pack(side="left", fill="x", expand=True)
+                  wraplength=260, anchor="w").pack(side="left", fill="x", expand=True)
+        ttk.Button(frame, text="📂 Open", command=open_cmd, width=10,
+                   state="normal" if open_cmd else "disabled").pack(side="left", padx=(8, 0))
 
     def _output_row(self):
         frame = ttk.Frame(self)
         frame.pack(fill="x", padx=14, pady=3)
         ttk.Label(frame, text="Output Location", width=18, anchor="w").pack(side="left")
         ttk.Button(frame, text="Select…", command=self.on_select_output_dir, width=10).pack(side="left", padx=(0, 4))
-        ttk.Button(frame, text="📂 Open", command=self.on_open_output_dir, width=8).pack(side="left", padx=(0, 8))
         ttk.Label(frame, textvariable=self.output_dir, foreground="#1a5fb4",
                   wraplength=260, anchor="w").pack(side="left", fill="x", expand=True)
+        ttk.Button(frame, text="📂 Open", command=self.on_open_output_dir, width=10).pack(side="left", padx=(8, 0))
 
     def _report_name_row(self):
         frame = ttk.Frame(self)
@@ -105,6 +117,17 @@ class MainWindow(tk.Tk):
         ttk.Label(frame, text="Name of the report:", width=18, anchor="w").pack(side="left")
         ttk.Entry(frame, textvariable=self.report_name, width=36).pack(side="left", padx=(0, 8))
         self.report_name.trace_add("write", self._on_report_name_changed)
+
+    def _open_file(self, path: str):
+        if not path or not os.path.exists(path):
+            messagebox.showwarning("Open file", "The selected file does not exist.")
+            return
+        if sys.platform == "win32":
+            os.startfile(path)
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", path])
+        else:
+            subprocess.Popen(["xdg-open", path])
 
     def _on_report_name_changed(self, *_):
         mapping = self.mapping_path.get()
@@ -311,7 +334,7 @@ class MainWindow(tk.Tk):
         self.line_number.set(line + 1)
         self._update_preview()
 
-        messagebox.showinfo("Done", f"Report generated:\n{final_path}")
+        GenerationCompleteDialog(self, final_path)
 
 
 if __name__ == "__main__":
