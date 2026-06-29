@@ -1,0 +1,13 @@
+In the excel : IMP : 73.8026819923372% & k value :  0.26197318007662795 
+
+
+
+So the imp &  k value needs calculations 
+
+
+
+The imp needs keep only ints and k value need *100 and keeps only int
+
+
+
+In the report I need to read 73% and 26% 

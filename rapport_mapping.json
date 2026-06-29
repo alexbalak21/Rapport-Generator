@@ -1,8 +1,8 @@
 {
   "config": {
-    "data_file": "S:/DEV/Report-Generator/final_rapport_data.xlsx",
-    "template_file": "C:/repport_gen/rapport_template.docx",
-    "output_dir": "C:\\repport_gen\\out",
+    "data_file": "S:/DEV/Report-Generator/data/final_rapport_data.xlsx",
+    "template_file": "S:/DEV/Report-Generator/data/rapport_template.docx",
+    "output_dir": "S:/DEV/Report-Generator/out",
     "date_format": "%d/%m/%Y"
   },
   "date rapport": "{{date_rapport}}",
