@@ -162,7 +162,8 @@ class MainWindow(tk.Tk):
             cfg     = loader.load_config()
             date_fmt = cfg.get("date_format", "%d/%m/%Y")
 
-            numero_rule = rules.get("numero_rapport")
+            # Accept either the legacy `numero_rapport` key or the new `sample_number` key
+            numero_rule = rules.get("sample_number") or rules.get("numero_rapport")
             if not isinstance(numero_rule, dict):
                 return ""
 

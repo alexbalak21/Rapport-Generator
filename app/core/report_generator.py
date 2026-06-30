@@ -247,18 +247,19 @@ class ReportGenerator:
                 pass
 
         # ── Write Word output ─────────────────────────────────────────
-        # Alias: if template uses {{numéro_rapport}} (accented), fill it too
-        num_val = computed_values.get("numero_rapport", "")
+        # Alias: accept both `sample_number` and legacy `numero_rapport`.
+        num_val = computed_values.get("sample_number", computed_values.get("numero_rapport", ""))
         if num_val:
             filled["{{numéro_rapport}}"] = num_val
+            filled["{{sample_number}}"] = num_val
 
         os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
         word.fill_placeholders(filled, output_path)
 
         # ── Write back to Excel ───────────────────────────────────────
-        # numero_rapport = yymmdd-N (e.g. 260621-8)
+        # numero_rapport / sample_number = yymmdd-N (e.g. 260621-8)
         # file_name resolved = full name for "nom rapport generé" column
-        numero = computed_values.get("numero_rapport", "")
+        numero = computed_values.get("sample_number", computed_values.get("numero_rapport", ""))
         file_name_rule = mapping.get("file_name")
         full_name = ""
         if file_name_rule and isinstance(file_name_rule, dict):
