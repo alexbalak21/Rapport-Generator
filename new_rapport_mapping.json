@@ -2,7 +2,7 @@
   "config": {
     "data_file": "S:/DEV/Report-Generator/data/final_rapport_data.xlsx",
     "template_file": "S:/DEV/Report-Generator/data/rapport_template.docx",
-    "output_dir": "S:/DEV/Report-Generator/out",
+    "output_dir": "S:\\DEV\\Report-Generator",
     "date_format": "%d/%m/%Y"
   },
   "date rapport": {
@@ -174,7 +174,7 @@
   },
   "numero echantillon": {
     "column": "numero echantillon",
-    "placeholder": "{{numero_echantillon}}"
+    "placeholder": "{{n_ech}}"
   },
   "numero_rapport": {
     "operation": "excel_day_counter",
