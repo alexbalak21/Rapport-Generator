@@ -48,7 +48,7 @@
       <tr><td>qualite</td><td>{{qualite}}</td><td></td><td>text (input)</td><td></td></tr>
       <tr><td>numero echantillon</td><td>{{n_ech}}</td><td></td><td>text/number (input)</td><td>Used as sample identifier</td></tr>
       <tr><td>(computed) date_du_jour</td><td>{{date_du_jour}}</td><td>today (format %d/%m/%Y)</td><td>computed</td><td>Not an input column — generated at runtime</td></tr>
-      <tr><td>(computed) numero_rapport</td><td>—</td><td>excel_day_counter (date_column: date rapport; sample_column: numero echantillon)</td><td>computed</td><td>Generated filename component/counter</td></tr>
+      <tr><td>(computed) numero_rapport</td><td>—</td><td>repport_number (date_column: date rapport; sample_column: numero echantillon)</td><td>computed</td><td>Generated filename component/counter</td></tr>
       <tr><td>(computed) file_name</td><td>—</td><td>format("{name} {numero_rapport}.docx")</td><td>computed</td><td>Final filename template — not stored in sheet</td></tr>
     </tbody>
   </table>
