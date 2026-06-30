@@ -1,5 +1,5 @@
 import re
-import copy
+
 try:
     from docx import Document
     from docx.oxml.ns import qn
@@ -40,15 +40,13 @@ class WordProcessor:
     def extract_placeholders(self) -> list:
         found = []
         for para in self._all_paragraphs():
-            found.extend(re.findall(r"\{\{(.*?)\}\}", para.text))
-        return found
+            found.extend(PLACEHOLDER_RE.findall(para.text))
+        return [placeholder.strip("{}") for placeholder in found]
 
     def fill_placeholders(self, mapping: dict, output_path: str) -> None:
         for para in self._all_paragraphs():
             self._replace_in_paragraph(para, mapping)
-            if "{{" in para.text:
-                # Second pass may be needed for placeholders that were split across
-                # runs in a way the first merge pass did not fully consolidate.
+            if self._has_remaining_placeholder(para.text):
                 self._replace_in_paragraph(para, mapping)
         self.document.save(output_path)
 
@@ -57,41 +55,32 @@ class WordProcessor:
     # ------------------------------------------------------------------
 
     def _replace_in_paragraph(self, paragraph, mapping: dict) -> None:
-        """
-        Replace placeholders while preserving the formatting of the run
-        that contains (or starts) each placeholder.
-
-        Algorithm:
-        1. Merge runs that together form a split placeholder into a single run
-           (inheriting the first fragment's formatting).
-        2. For each run, do simple string replacement — the run keeps its own
-           bold/color/font because we never touch runs that don't contain a tag.
-        """
         if not paragraph.runs:
             return
 
-        full_text = "".join(r.text for r in paragraph.runs)
-        if "{{" not in full_text:
+        if not self._has_remaining_placeholder("".join(r.text for r in paragraph.runs)):
             return
 
-        # ── Step 1: consolidate split-run placeholders ─────────────────
         self._merge_split_placeholders(paragraph)
+        self._replace_runs(paragraph.runs, mapping)
 
-        # ── Step 2: replace in each run individually ───────────────────
-        for run in paragraph.runs:
-            if "{{" not in run.text:
+    def _replace_runs(self, runs, mapping: dict) -> None:
+        for run in runs:
+            if not self._has_remaining_placeholder(run.text):
                 continue
-            for placeholder, value in mapping.items():
-                if placeholder in run.text:
-                    run.text = run.text.replace(placeholder, str(value))
+            run.text = self._replace_run_text(run.text, mapping)
+
+    def _replace_run_text(self, text: str, mapping: dict) -> str:
+        for placeholder, value in mapping.items():
+            if placeholder in text:
+                text = text.replace(placeholder, str(value))
+        return text
+
+    @staticmethod
+    def _has_remaining_placeholder(text: str) -> bool:
+        return "{{" in text and "}}" in text
 
     def _merge_split_placeholders(self, paragraph) -> None:
-        """
-        Scan runs left-to-right.  When an opening '{{' has no matching '}}'
-        in the same run, keep absorbing subsequent runs (copying their text
-        into the first fragment's run, inheriting its formatting) until the
-        closing '}}' is found.
-        """
         runs = paragraph.runs
         i = 0
         while i < len(runs):
@@ -101,12 +90,10 @@ class WordProcessor:
                 i += 1
                 continue
 
-            # Check if the closing braces are already in this run
             if "}}" in text[open_idx:]:
                 i += 1
                 continue
 
-            # Need to absorb subsequent runs until we find '}}'
             j = i + 1
             accumulated = text
             while j < len(runs):
@@ -116,15 +103,10 @@ class WordProcessor:
                 j += 1
 
             if "}}" not in accumulated:
-                # Malformed / incomplete placeholder — leave as-is
                 i += 1
                 continue
 
-            # Write accumulated text into run[i], clear runs i+1..j
             runs[i].text = accumulated
             for k in range(i + 1, j + 1):
                 runs[k].text = ""
-
-            # Don't advance i — the merged run might contain multiple placeholders
-            # but the outer loop will handle them in Step 2.
             i += 1

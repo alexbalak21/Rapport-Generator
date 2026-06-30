@@ -1,6 +1,7 @@
 import ast
 import operator
 import re
+from itertools import zip_longest
 
 import openpyxl
 
@@ -15,8 +16,14 @@ class ExcelReader:
 
     def load(self):
         """Load the workbook and pre-cache all sheets."""
+        self._load_workbooks()
+        self._cache_sheets()
+
+    def _load_workbooks(self):
         self.workbook = openpyxl.load_workbook(self.filepath, data_only=True)
         self.formula_workbook = openpyxl.load_workbook(self.filepath, data_only=False)
+
+    def _cache_sheets(self):
         self._sheets = {}
         for name in self.workbook.sheetnames:
             self._sheets[name] = self._read_sheet(
@@ -35,23 +42,30 @@ class ExcelReader:
 
     def _read_sheet(self, data_sheet, formula_sheet) -> list[dict]:
         """Return all data rows of a sheet as a list of dicts keyed by header."""
-        data_rows = list(data_sheet.iter_rows(values_only=True))
-        if not data_rows:
+        rows = list(data_sheet.iter_rows(values_only=True))
+        if not rows:
             return []
-        headers = [self._normalize_header(h) for h in data_rows[0]]
-        result = []
+
+        headers = [self._normalize_header(value) for value in rows[0]]
+        return [
+            self._build_row_dict(headers, data_row, formula_row, data_sheet, formula_sheet)
+            for data_row, formula_row in self._iter_sheet_rows(data_sheet, formula_sheet, rows)
+        ]
+
+    def _iter_sheet_rows(self, data_sheet, formula_sheet, rows):
         formula_rows = list(formula_sheet.iter_rows())
-        for data_row, formula_row in zip(data_rows[1:], formula_rows[1:]):
-            row_data = {}
-            for index, header in enumerate(headers):
-                data_value = data_row[index] if index < len(data_row) else None
-                formula_cell = formula_row[index] if index < len(formula_row) else None
-                value = self._resolve_cell_value(
-                    data_value, formula_cell, data_sheet, formula_sheet
-                )
-                row_data[header] = "" if value is None else value
-            result.append(row_data)
-        return result
+        yield from zip_longest(rows[1:], formula_rows[1:], fillvalue=())
+
+    def _build_row_dict(self, headers, data_row, formula_row, data_sheet, formula_sheet):
+        row_data = {}
+        for index, header in enumerate(headers):
+            data_value = data_row[index] if index < len(data_row) else None
+            formula_cell = formula_row[index] if index < len(formula_row) else None
+            value = self._resolve_cell_value(
+                data_value, formula_cell, data_sheet, formula_sheet
+            )
+            row_data[header] = "" if value is None else value
+        return row_data
 
     def _resolve_cell_value(self, data_value, formula_cell, data_sheet, formula_sheet):
         if formula_cell is None or formula_cell.data_type != "f":
@@ -67,21 +81,29 @@ class ExcelReader:
             return data_value
 
     def _evaluate_formula(self, formula, data_sheet, formula_sheet, cache):
-        text = formula.lstrip("=").strip()
-        if not text:
+        expression = self._extract_formula_expression(formula)
+        if not expression:
             raise ValueError("Empty formula")
 
-        def replace_ref(match):
-            coord = match.group(0).replace("$", "")
-            if coord in cache:
-                value = cache[coord]
-            else:
-                value = self._get_cell_value(coord, data_sheet, formula_sheet, cache)
-                cache[coord] = value
-            return self._format_value_for_expression(value)
+        evaluated = re.sub(
+            r"\$?[A-Za-z]{1,3}\$?\d+",
+            lambda match: self._resolve_formula_reference(match.group(0), data_sheet, formula_sheet, cache),
+            expression,
+        )
+        return self._safe_eval(evaluated)
 
-        expr = re.sub(r"\$?[A-Za-z]{1,3}\$?\d+", replace_ref, text)
-        return self._safe_eval(expr)
+    @staticmethod
+    def _extract_formula_expression(formula):
+        return formula.lstrip("=").strip()
+
+    def _resolve_formula_reference(self, coord, data_sheet, formula_sheet, cache):
+        coord = coord.replace("$", "")
+        if coord in cache:
+            value = cache[coord]
+        else:
+            value = self._get_cell_value(coord, data_sheet, formula_sheet, cache)
+            cache[coord] = value
+        return self._format_value_for_expression(value)
 
     def _get_cell_value(self, coord, data_sheet, formula_sheet, cache):
         cell = data_sheet[coord]

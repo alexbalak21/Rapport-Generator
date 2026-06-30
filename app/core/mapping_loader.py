@@ -138,38 +138,10 @@ class MappingLoader:
 
         result = {}
         for row in rows[1:]:
-            if not row:
+            parsed = self._parse_mapping_row(row, header_index)
+            if parsed is None:
                 continue
-            column_value = self._safe_cell(row, header_index.get("spreadsheet column"))
-            if not column_value:
-                continue
-
-            column_text = str(column_value).strip()
-            is_computed = column_text.lower().startswith(_COMPUTED_PREFIX)
-            key = column_text[len(_COMPUTED_PREFIX):].strip() if is_computed else column_text
-            if not key:
-                continue
-
-            placeholder_value = self._safe_cell(row, header_index.get("placeholder"))
-            placeholder = self._normalize_header(placeholder_value)
-            if placeholder in {"", "—", "-"}:
-                placeholder = None
-
-            operation_value = self._safe_cell(row, header_index.get("operation"))
-            operation_text = str(operation_value).strip() if operation_value is not None else ""
-
-            if is_computed:
-                rule = self._parse_computed_rule(operation_text)
-            else:
-                rule = {"column": key}
-                if placeholder:
-                    rule["placeholder"] = placeholder
-                operations = self._parse_operations(operation_text)
-                if operations:
-                    rule["operations"] = operations
-
-            if not rule:
-                continue
+            key, rule = parsed
             result[key] = rule
 
         config = self._load_xlsx_config(workbook)
@@ -178,6 +150,42 @@ class MappingLoader:
                 result["file_name"] = {**result["file_name"], "name": config["name"]}
             result["config"] = {k: v for k, v in config.items() if k != "name"}
         return result
+
+    def _parse_mapping_row(self, row, header_index):
+        if not row:
+            return None
+
+        column_value = self._safe_cell(row, header_index.get("spreadsheet column"))
+        if not column_value:
+            return None
+
+        column_text = str(column_value).strip()
+        is_computed = column_text.lower().startswith(_COMPUTED_PREFIX)
+        key = column_text[len(_COMPUTED_PREFIX):].strip() if is_computed else column_text
+        if not key:
+            return None
+
+        placeholder_value = self._safe_cell(row, header_index.get("placeholder"))
+        placeholder = self._normalize_header(placeholder_value)
+        if placeholder in {"", "—", "-"}:
+            placeholder = None
+
+        operation_value = self._safe_cell(row, header_index.get("operation"))
+        operation_text = str(operation_value).strip() if operation_value is not None else ""
+
+        if is_computed:
+            rule = self._parse_computed_rule(operation_text)
+        else:
+            rule = {"column": key}
+            if placeholder:
+                rule["placeholder"] = placeholder
+            operations = self._parse_operations(operation_text)
+            if operations:
+                rule["operations"] = operations
+
+        if not rule:
+            return None
+        return key, rule
 
     def _safe_cell(self, row, index):
         if index is None or index >= len(row):

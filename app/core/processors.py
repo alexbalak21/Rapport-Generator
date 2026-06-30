@@ -47,6 +47,98 @@ def _normalize(value) -> str:
     return str(value).strip() if value is not None else ""
 
 
+def _to_number(x):
+    if x is None:
+        raise ValueError("None is not a number")
+    if isinstance(x, (int, float)):
+        return float(x)
+    s = str(x).strip()
+    if s == "":
+        raise ValueError("empty string")
+    s = s.replace(",", ".")
+    return float(s)
+
+
+def _apply_numeric_operation(v, op):
+    try:
+        num = _to_number(v)
+    except Exception:
+        return v
+
+    operand = op.get("value", 0)
+    try:
+        operand = float(operand)
+    except Exception:
+        operand = 0.0
+
+    op_type = op.get("type")
+    if op_type == "multiply":
+        return num * operand
+    if op_type == "divide":
+        if operand == 0:
+            return num
+        return num / operand
+    if op_type == "add":
+        return num + operand
+    if op_type == "subtract":
+        return num - operand
+    return num
+
+
+def _apply_round(v, op):
+    decimals = int(op.get("decimals", 0))
+    try:
+        num = _to_number(v)
+        rounded = round(num, decimals)
+        return int(rounded) if decimals == 0 else rounded
+    except Exception:
+        return v
+
+
+def _apply_date_format(v, op):
+    import datetime as _dt
+
+    fmt = op.get("format", "%d/%m/%Y")
+    if isinstance(v, (_dt.date, _dt.datetime)):
+        return v.strftime(fmt)
+
+    s = str(v).strip()
+    if not s:
+        return v
+
+    parsed = None
+    try:
+        parsed = _dt.datetime.fromisoformat(s)
+    except Exception:
+        try:
+            parsed = _dt.datetime.strptime(s, fmt)
+        except Exception:
+            for f in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%m/%d/%Y"):
+                try:
+                    parsed = _dt.datetime.strptime(s, f)
+                    break
+                except Exception:
+                    parsed = None
+    if parsed:
+        return parsed.strftime(fmt)
+    return v
+
+
+def _apply_string_operation(v, op):
+    op_type = op.get("type")
+    if op_type == "suffix":
+        return f"{v}{op.get('value','')}"
+    if op_type == "prefix":
+        return f"{op.get('value','')}{v}"
+    if op_type == "upper":
+        return str(v).upper()
+    if op_type == "lower":
+        return str(v).lower()
+    if op_type == "strip":
+        return str(v).strip()
+    return v
+
+
 # ── op_lookup ─────────────────────────────────────────────────────────────────
 
 def op_lookup(rule: dict, row_data: dict, excel_reader=None) -> str | None:
@@ -256,113 +348,23 @@ def apply_operations(value, operations: list | None, row_data: dict | None = Non
 
     v = value
 
-    def _to_number(x):
-        if x is None:
-            raise ValueError("None is not a number")
-        if isinstance(x, (int, float)):
-            return float(x)
-        s = str(x).strip()
-        if s == "":
-            raise ValueError("empty string")
-        # Accept comma as decimal separator as a convenience
-        s = s.replace(",", ".")
-        return float(s)
-
     for op in operations:
         t = op.get("type")
         if t == "formula":
-            # workbook loaded with data_only=True; nothing to do
             continue
 
         if t in ("multiply", "divide", "add", "subtract"):
-            try:
-                num = _to_number(v)
-            except Exception:
-                # Cannot coerce to number — skip numeric op
-                continue
-            operand = op.get("value", 0)
-            try:
-                operand = float(operand)
-            except Exception:
-                operand = 0.0
-
-            if t == "multiply":
-                num = num * operand
-            elif t == "divide":
-                if operand == 0:
-                    # avoid ZeroDivisionError
-                    pass
-                else:
-                    num = num / operand
-            elif t == "add":
-                num = num + operand
-            elif t == "subtract":
-                num = num - operand
-
-            v = num
+            v = _apply_numeric_operation(v, op)
             continue
 
         if t == "round":
-            decimals = int(op.get("decimals", 0))
-            try:
-                num = _to_number(v)
-                rounded = round(num, decimals)
-                # If zero decimals prefer int for nicer display (73 instead of 73.0)
-                v = int(rounded) if decimals == 0 else rounded
-            except Exception:
-                # If not numeric, leave as-is
-                pass
+            v = _apply_round(v, op)
             continue
 
         if t == "date_format":
-            fmt = op.get("format", "%d/%m/%Y")
-            import datetime as _dt
-
-            # If it's already a date/datetime, format directly
-            if isinstance(v, (_dt.date, _dt.datetime)):
-                v = v.strftime(fmt)
-                continue
-
-            s = str(v).strip()
-            if not s:
-                continue
-
-            # Try ISO parse, then try the provided format, then common formats
-            parsed = None
-            try:
-                parsed = _dt.datetime.fromisoformat(s)
-            except Exception:
-                try:
-                    parsed = _dt.datetime.strptime(s, fmt)
-                except Exception:
-                    for f in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%m/%d/%Y"):
-                        try:
-                            parsed = _dt.datetime.strptime(s, f)
-                            break
-                        except Exception:
-                            parsed = None
-            if parsed:
-                v = parsed.strftime(fmt)
+            v = _apply_date_format(v, op)
             continue
 
-        if t == "suffix":
-            v = f"{v}{op.get('value','')}"
-            continue
-
-        if t == "prefix":
-            v = f"{op.get('value','')}{v}"
-            continue
-
-        if t == "upper":
-            v = str(v).upper()
-            continue
-
-        if t == "lower":
-            v = str(v).lower()
-            continue
-
-        if t == "strip":
-            v = str(v).strip()
-            continue
+        v = _apply_string_operation(v, op)
 
     return v
